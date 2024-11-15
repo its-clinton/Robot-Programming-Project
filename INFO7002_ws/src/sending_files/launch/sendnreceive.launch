@@ -1,0 +1,25 @@
+<launch>
+    <!-- Argument for message, which can be passed when launching -->
+    <arg name="Message" default="Launch" />
+    
+    <!-- setting a parameter -->
+    <param name="msg" value="$(arg Message)" />
+
+    <!-- Node for sender -->
+    <node 
+        name="sender"
+        pkg="sending_files"
+        type="sender"
+        output="screen"
+        launch-prefix="gnome-terminal --command"
+    />
+    
+    <!-- Node for receiver -->
+    <node
+        name="receiver"
+        pkg="sending_files"
+        type="receiver"
+        output="screen"
+    />
+</launch>
+

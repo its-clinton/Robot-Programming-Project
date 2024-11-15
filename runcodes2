@@ -1,0 +1,82 @@
+Task 1: Setup and Run Nodes
+
+1. Create a New Workspace - Open a terminal and create a new workspace named `INFO7002_ws`:
+
+     mkdir -p ~/INFO7002_ws/src
+     cd ~/INFO7002_ws/src
+     catkin_init_workspace
+
+
+2. Create a New Package - Create a new package named `sending_files` with dependencies `std_msgs`, `roscpp`, and `rospy`:
+    
+     catkin_create_pkg sending_files std_msgs roscpp rospy
+
+3. Unzip and Organize Files - Download and unzip the file `sending_files.zip`. Copy the contents to your package:
+   
+     unzip sending_files.zip
+     cp -r sending_files/* ~/INFO7002_ws/src/sending_files/
+ 
+    Move the files to their appropriate subfolders in your package:
+     src: Place `sender.cpp` and `receiver.cpp`.
+     launch: Create this directory and place the `sendnreceive.launch` file here if it’s not included in Task 2.
+
+4. Modify and Compile
+
+   - Open the `sender.cpp` and `receiver.cpp` files and update the package name and file paths as needed.
+   - Navigate to your workspace and compile:
+ 
+     cd ~/INFO7002_ws
+     catkin_make
+
+5. Run the Nodes
+   
+     source devel/setup.bash
+     rosrun sending_files sender
+     rosrun sending_files receiver
+    
+
+Task 2: Create and Use Launch File
+
+1. Create Launch Directory
+   - Inside your package, create a `launch` directory:
+     
+     mkdir -p ~/INFO7002_ws/src/sending_files/launch
+     
+
+2. Add Launch File
+
+   Download `sendnreceive.launch` and place it in the `launch` folder:
+    
+     cp /path/to/sendnreceive.launch ~/INFO7002_ws/src/sending_files/launch/
+   
+
+3. Update Launch File
+   - Open `sendnreceive.launch` and update the package name if necessary:
+
+4. Run the Launch File
+   - Use the following command to launch both nodes:
+     
+     roslaunch sending_files sendnreceive.launch
+ 
+
+Task 3: Update Subscriber Node
+
+1. Modify `receiver.cpp`
+   - Add functionality to publish student IDs. Here’s a basic example:
+
+2. Recompile and Run
+  
+     cd ~/INFO7002_ws
+     catkin_make
+
+   - Source the workspace and run the launch file:
+ 
+     source devel/setup.bash
+     roslaunch sending_files sendnreceive.launch
+   
+
+3. Visualize with rqt_graph
+   - Use `rqt_graph` to visualize topic connections:
+
+     rosrun rqt_graph rqt_graph
+ 

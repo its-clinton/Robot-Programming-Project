@@ -1,0 +1,7 @@
+<launch>
+  <node name="youtuber_1" pkg="option3_package" type="youtuber_1" output="screen"/>
+  <node name="youtuber_2" pkg="option3_package" type="youtuber_2" output="screen"/>
+  <node name="youtuber_3" pkg="option3_package" type="youtuber_3" output="screen"/>
+  <node name="audience_1" pkg="option3_package" type="audience_1" output="screen"/>
+  <node name="audience_2" pkg="option3_package" type="audience_2" output="screen"/>
+</launch>

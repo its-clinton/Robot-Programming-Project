@@ -1,0 +1,8 @@
+prefix=/home/clish/catkin_ws/install
+
+Name: option3_package
+Description: Description of option3_package
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib 
+Requires: roscpp std_msgs message_runtime

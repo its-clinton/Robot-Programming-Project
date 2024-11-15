@@ -1,0 +1,62 @@
+1. Source the bashrc:
+
+	source ~/.bashrc
+	
+	
+To buid:
+
+	cd ~/catkin_ws
+	catkin_make
+	source devel/setup.bash
+
+2. Start roscore:
+
+Before running any other nodes, you must start the ROS master using roscore. Open a new terminal window and run:
+
+
+	roscore
+
+
+3. Run the talker:
+
+After starting roscore, in a separate terminal (not the same one where roscore is running), run your talker node:
+
+
+	rosrun option3_package talker
+
+
+4. Run the listener:
+
+
+In a separate terminal (not the same one where roscore and talker are running), run your listener node:
+
+	rosrun option3_package listener
+	
+
+5. Run the launch file to start all five nodes:
+	
+	roslaunch option3_package five_nodes.launch
+	
+
+
+Task 3: Service and Client
+
+    Open two terminals:
+
+    	Terminal 1: Run the Service Server (server.cpp):
+        
+   		rosrun option3_package service_server
+
+	Terminal 2: Run the Service Client (client.cpp):
+	
+		rosrun option3_package service_client
+
+
+
+
+
+	
+
+
+
+

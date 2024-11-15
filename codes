@@ -1,0 +1,1031 @@
+/include/treasuredig/turtl_frame.h
+
+
+#include <QFrame>
+#include <QImage>
+#include <QPainter>
+#include <QPaintEvent>
+#include <QTimer>
+#include <QVector>
+
+// This prevents a MOC error with versions of boost >= 1.48
+#ifndef Q_MOC_RUN  // See: https://bugreports.qt-project.org/browse/QTBUG-22829
+# include <ros/ros.h>
+
+# include <std_srvs/Empty.h>
+# include <treasuredig/Spawn.h>
+# include <treasuredig/Kill.h>
+# include <map>
+
+# include "turtle.h"
+#endif
+
+namespace treasuredig
+{
+
+class TurtleFrame : public QFrame
+{
+  Q_OBJECT
+public:
+  TurtleFrame(QWidget* parent = 0, Qt::WindowFlags f = 0);
+  ~TurtleFrame();
+
+  std::string spawnTurtle(const std::string& name, float x, float y, float angle);
+  std::string spawnTurtle(const std::string& name, float x, float y, float angle, size_t index);
+
+protected:
+  void paintEvent(QPaintEvent* event);
+
+private slots:
+  void onUpdate();
+
+private:
+  void updateTurtles();
+  void clear();
+  bool hasTurtle(const std::string& name);
+
+  bool clearCallback(std_srvs::Empty::Request&, std_srvs::Empty::Response&);
+  bool resetCallback(std_srvs::Empty::Request&, std_srvs::Empty::Response&);
+  bool spawnCallback(treasuredig::Spawn::Request&, treasuredig::Spawn::Response&);
+  bool killCallback(treasuredig::Kill::Request&, treasuredig::Kill::Response&);
+
+  ros::NodeHandle nh_;
+  ros::NodeHandle private_nh_;
+  QTimer* update_timer_;
+  QImage path_image_;
+  QPainter path_painter_;
+
+  uint64_t frame_count_;
+
+  ros::WallTime last_turtle_update_;
+
+  ros::ServiceServer clear_srv_;
+  ros::ServiceServer reset_srv_;
+  ros::ServiceServer spawn_srv_;
+  ros::ServiceServer kill_srv_;
+
+  typedef std::map<std::string, TurtlePtr> M_Turtle;
+  M_Turtle turtles_;
+  uint32_t id_counter_;
+
+  QVector<QImage> turtle_images_;
+
+  float meter_;
+  float width_in_meters_;
+  float height_in_meters_;
+};
+
+}
+
+
+
+
+/include/treasuredig/turtl.h
+
+
+
+
+#ifndef TURTLESIM_TURTLE_H
+#define TURTLESIM_TURTLE_H
+
+// This prevents a MOC error with versions of boost >= 1.48
+#ifndef Q_MOC_RUN  // See: https://bugreports.qt-project.org/browse/QTBUG-22829
+# include <ros/ros.h>
+# include <boost/shared_ptr.hpp>
+
+# include <treasuredig/Pose.h>
+# include <treasuredig/Color.h>
+# include <treasuredig/Treasure.h>
+# include <geometry_msgs/Twist.h>
+# include <treasuredig/SetPen.h>
+# include <treasuredig/TeleportRelative.h>
+# include <treasuredig/TeleportAbsolute.h>
+#endif
+
+#include <QImage>
+#include <QPainter>
+#include <QPen>
+#include <QPointF>
+
+#define PI 3.14159265
+
+namespace treasuredig
+{
+
+class Turtle
+{
+public:
+  Turtle(const ros::NodeHandle& nh, const QImage& turtle_image, const QPointF& pos, float orient);
+
+  bool update(double dt, QPainter& path_painter, const QImage& path_image, qreal canvas_width, qreal canvas_height);
+  void paint(QPainter &painter);
+private:
+  void velocityCallback(const geometry_msgs::Twist::ConstPtr& vel);
+  bool setPenCallback(treasuredig::SetPen::Request&, treasuredig::SetPen::Response&);
+  bool teleportRelativeCallback(treasuredig::TeleportRelative::Request&, treasuredig::TeleportRelative::Response&);
+  bool teleportAbsoluteCallback(treasuredig::TeleportAbsolute::Request&, treasuredig::TeleportAbsolute::Response&);
+
+  void rotateImage();
+
+  ros::NodeHandle nh_;
+
+  QImage turtle_image_;
+  QImage turtle_rotated_image_;
+  
+  //Dongmo
+  QImage treasure_image;
+  Treasure treasureStatus;
+  ros::Publisher treasure_pub_;
+  //end
+  
+  QPointF pos_;
+  qreal orient_;
+
+  qreal lin_vel_x_;
+  qreal lin_vel_y_;
+  qreal ang_vel_;
+  bool pen_on_;
+  QPen pen_;
+
+  ros::Subscriber velocity_sub_;
+  ros::Publisher pose_pub_;
+  ros::Publisher color_pub_;
+  ros::ServiceServer set_pen_srv_;
+  ros::ServiceServer teleport_relative_srv_;
+  ros::ServiceServer teleport_absolute_srv_;
+
+  ros::WallTime last_command_time_;
+
+  float meter_;
+
+  struct TeleportRequest
+  {
+    TeleportRequest(float x, float y, qreal _theta, qreal _linear, bool _relative)
+    : pos(x, y)
+    , theta(_theta)
+    , linear(_linear)
+    , relative(_relative)
+    {}
+
+    QPointF pos;
+    qreal theta;
+    qreal linear;
+    bool relative;
+  };
+  typedef std::vector<TeleportRequest> V_TeleportRequest;
+  V_TeleportRequest teleport_requests_;
+};
+typedef boost::shared_ptr<Turtle> TurtlePtr;
+
+}
+
+#endif
+
+
+
+
+
+msg/color.msg
+
+
+uint8 r
+uint8 g
+uint8 b
+
+
+msg/color.msg
+
+
+float32 x
+float32 y
+float32 theta
+
+float32 linear_velocity
+float32 angular_velocity
+
+
+
+msg/Treasure.msg
+
+
+src/treasuredig/teleop_turtle_key.cpp:
+
+
+#include <ros/ros.h>
+#include <geometry_msgs/Twist.h>
+#include <signal.h>
+#include <stdio.h>
+#ifndef _WIN32
+# include <termios.h>
+# include <unistd.h>
+#else
+# include <windows.h>
+#endif
+
+#define KEYCODE_RIGHT 0x43
+#define KEYCODE_LEFT 0x44
+#define KEYCODE_UP 0x41
+#define KEYCODE_DOWN 0x42
+#define KEYCODE_B 0x62
+#define KEYCODE_C 0x63
+#define KEYCODE_D 0x64
+#define KEYCODE_E 0x65
+#define KEYCODE_F 0x66
+#define KEYCODE_G 0x67
+#define KEYCODE_Q 0x71
+#define KEYCODE_R 0x72
+#define KEYCODE_T 0x74
+#define KEYCODE_V 0x76
+
+class KeyboardReader
+{
+public:
+  KeyboardReader()
+#ifndef _WIN32
+    : kfd(0)
+#endif
+  {
+#ifndef _WIN32
+    // get the console in raw mode
+    tcgetattr(kfd, &cooked);
+    struct termios raw;
+    memcpy(&raw, &cooked, sizeof(struct termios));
+    raw.c_lflag &=~ (ICANON | ECHO);
+    // Setting a new line, then end of file
+    raw.c_cc[VEOL] = 1;
+    raw.c_cc[VEOF] = 2;
+    tcsetattr(kfd, TCSANOW, &raw);
+#endif
+  }
+  void readOne(char * c)
+  {
+#ifndef _WIN32
+    int rc = read(kfd, c, 1);
+    if (rc < 0)
+    {
+      throw std::runtime_error("read failed");
+    }
+#else
+    for(;;)
+    {
+      HANDLE handle = GetStdHandle(STD_INPUT_HANDLE);
+      INPUT_RECORD buffer;
+      DWORD events;
+      PeekConsoleInput(handle, &buffer, 1, &events);
+      if(events > 0)
+      {
+        ReadConsoleInput(handle, &buffer, 1, &events);
+        if (buffer.Event.KeyEvent.wVirtualKeyCode == VK_LEFT)
+        {
+          *c = KEYCODE_LEFT;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == VK_UP)
+        {
+          *c = KEYCODE_UP;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == VK_RIGHT)
+        {
+          *c = KEYCODE_RIGHT;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == VK_DOWN)
+        {
+          *c = KEYCODE_DOWN;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x42)
+        {
+          *c = KEYCODE_B;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x43)
+        {
+          *c = KEYCODE_C;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x44)
+        {
+          *c = KEYCODE_D;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x45)
+        {
+          *c = KEYCODE_E;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x46)
+        {
+          *c = KEYCODE_F;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x47)
+        {
+          *c = KEYCODE_G;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x51)
+        {
+          *c = KEYCODE_Q;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x52)
+        {
+          *c = KEYCODE_R;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x54)
+        {
+          *c = KEYCODE_T;
+          return;
+        }
+        else if (buffer.Event.KeyEvent.wVirtualKeyCode == 0x56)
+        {
+          *c = KEYCODE_V;
+          return;
+        }
+      }
+    }
+#endif
+  }
+  void shutdown()
+  {
+#ifndef _WIN32
+    tcsetattr(kfd, TCSANOW, &cooked);
+#endif
+  }
+private:
+#ifndef _WIN32
+  int kfd;
+  struct termios cooked;
+#endif
+};
+
+KeyboardReader input;
+
+class TeleopTurtle
+{
+public:
+  TeleopTurtle();
+  void keyLoop();
+
+private:
+
+  
+  ros::NodeHandle nh_;
+  double linear_, angular_, l_scale_, a_scale_;
+  ros::Publisher twist_pub_;
+  
+};
+
+TeleopTurtle::TeleopTurtle():
+  linear_(0),
+  angular_(0),
+  l_scale_(2.0),
+  a_scale_(2.0)
+{
+  nh_.param("scale_angular", a_scale_, a_scale_);
+  nh_.param("scale_linear", l_scale_, l_scale_);
+
+  twist_pub_ = nh_.advertise<geometry_msgs::Twist>("turtle1/cmd_vel", 1);
+}
+
+void quit(int sig)
+{
+  (void)sig;
+  input.shutdown();
+  ros::shutdown();
+  exit(0);
+}
+
+
+int main(int argc, char** argv)
+{
+  ros::init(argc, argv, "teleop_turtle");
+  TeleopTurtle teleop_turtle;
+
+  signal(SIGINT,quit);
+
+  teleop_turtle.keyLoop();
+  quit(0);
+  
+  return(0);
+}
+
+
+void TeleopTurtle::keyLoop()
+{
+  char c;
+  bool dirty=false;
+
+  puts("Reading from keyboard");
+  puts("---------------------------");
+  puts("Use arrow keys to move the turtle. 'q' to quit.");
+
+
+  for(;;)
+  {
+    // get the next event from the keyboard  
+    try
+    {
+      input.readOne(&c);
+    }
+    catch (const std::runtime_error &)
+    {
+      perror("read():");
+      return;
+    }
+
+    linear_=angular_=0;
+    ROS_DEBUG("value: 0x%02X\n", c);
+  
+    switch(c)
+    {
+      case KEYCODE_LEFT:
+        ROS_DEBUG("LEFT");
+        angular_ = 1.0;
+        dirty = true;
+        break;
+      case KEYCODE_RIGHT:
+        ROS_DEBUG("RIGHT");
+        angular_ = -1.0;
+        dirty = true;
+        break;
+      case KEYCODE_UP:
+        ROS_DEBUG("UP");
+        linear_ = 1.0;
+        dirty = true;
+        break;
+      case KEYCODE_DOWN:
+        ROS_DEBUG("DOWN");
+        linear_ = -1.0;
+        dirty = true;
+        break;
+      case KEYCODE_Q:
+        ROS_DEBUG("quit");
+        return;
+    }
+   
+
+    geometry_msgs::Twist twist;
+    twist.angular.z = a_scale_*angular_;
+    twist.linear.x = l_scale_*linear_;
+    if(dirty ==true)
+    {
+      twist_pub_.publish(twist);    
+      dirty=false;
+    }
+  }
+
+
+  return;
+}
+
+
+
+src/treasuredig/turtle_frame.cpp
+
+
+#include "treasuredig/turtle_frame.h"
+
+#include <QPointF>
+
+#include <ros/package.h>
+#include <cstdlib>
+#include <ctime>
+
+#define DEFAULT_BG_R 0x45
+#define DEFAULT_BG_G 0x56
+#define DEFAULT_BG_B 0xff
+
+namespace treasuredig
+{
+
+TurtleFrame::TurtleFrame(QWidget* parent, Qt::WindowFlags f)
+: QFrame(parent, f)
+, path_image_(500, 500, QImage::Format_ARGB32)
+, path_painter_(&path_image_)
+, frame_count_(0)
+, id_counter_(0)
+, private_nh_("~")
+{
+  setFixedSize(500, 500);
+  setWindowTitle("treasuredig");
+
+  srand(time(NULL));
+
+  update_timer_ = new QTimer(this);
+  update_timer_->setInterval(16);
+  update_timer_->start();
+
+  connect(update_timer_, SIGNAL(timeout()), this, SLOT(onUpdate()));
+
+  if (!private_nh_.hasParam("background_r"))
+  {
+    private_nh_.setParam("background_r", DEFAULT_BG_R);
+  }
+  if (!private_nh_.hasParam("background_g"))
+  {
+    private_nh_.setParam("background_g", DEFAULT_BG_G);
+  }
+  if (!private_nh_.hasParam("background_b"))
+  {
+    private_nh_.setParam("background_b", DEFAULT_BG_B);
+  }
+
+  QVector<QString> turtles;
+  turtles.append("box-turtle.png");
+  turtles.append("robot-turtle.png");
+  turtles.append("sea-turtle.png");
+  turtles.append("hydro.svg");
+  turtles.append("lunar.png");
+  turtles.append("melodic.png");
+  turtles.append("noetic.png");
+
+  QString images_path = (ros::package::getPath("treasuredig") + "/images/").c_str();
+  for (int i = 0; i < turtles.size(); ++i)
+  {
+    QImage img;
+    img.load(images_path + turtles[i]);
+    turtle_images_.append(img);
+  }
+
+  meter_ = turtle_images_[0].height();
+
+  clear();
+
+  clear_srv_ = nh_.advertiseService("clear", &TurtleFrame::clearCallback, this);
+  reset_srv_ = nh_.advertiseService("reset", &TurtleFrame::resetCallback, this);
+  spawn_srv_ = nh_.advertiseService("spawn", &TurtleFrame::spawnCallback, this);
+  kill_srv_ = nh_.advertiseService("kill", &TurtleFrame::killCallback, this);
+
+  ROS_INFO("Starting treasuredig with node name %s", ros::this_node::getName().c_str()) ;
+
+  width_in_meters_ = (width() - 1) / meter_;
+  height_in_meters_ = (height() - 1) / meter_;
+  spawnTurtle("", width_in_meters_ / 2.0, height_in_meters_ / 2.0, 0);
+
+  // spawn all available turtle types
+  if(false)
+  {
+    for(int index = 0; index < turtles.size(); ++index)
+    {
+      QString name = turtles[index];
+      name = name.split(".").first();
+      name.replace(QString("-"), QString(""));
+      spawnTurtle(name.toStdString(), 1.0 + 1.5 * (index % 7), 1.0 + 1.5 * (index / 7), PI / 2.0, index);
+    }
+  }
+}
+
+TurtleFrame::~TurtleFrame()
+{
+  delete update_timer_;
+}
+
+bool TurtleFrame::spawnCallback(treasuredig::Spawn::Request& req, treasuredig::Spawn::Response& res)
+{
+  std::string name = spawnTurtle(req.name, req.x, req.y, req.theta);
+  if (name.empty())
+  {
+    ROS_ERROR("A turtled named [%s] already exists", req.name.c_str());
+    return false;
+  }
+
+  res.name = name;
+
+  return true;
+}
+
+bool TurtleFrame::killCallback(treasuredig::Kill::Request& req, treasuredig::Kill::Response&)
+{
+  M_Turtle::iterator it = turtles_.find(req.name);
+  if (it == turtles_.end())
+  {
+    ROS_ERROR("Tried to kill turtle [%s], which does not exist", req.name.c_str());
+    return false;
+  }
+
+  turtles_.erase(it);
+  update();
+
+  return true;
+}
+
+bool TurtleFrame::hasTurtle(const std::string& name)
+{
+  return turtles_.find(name) != turtles_.end();
+}
+
+std::string TurtleFrame::spawnTurtle(const std::string& name, float x, float y, float angle)
+{
+  return spawnTurtle(name, x, y, angle, rand() % turtle_images_.size());
+}
+
+std::string TurtleFrame::spawnTurtle(const std::string& name, float x, float y, float angle, size_t index)
+{
+  std::string real_name = name;
+  if (real_name.empty())
+  {
+    do
+    {
+      std::stringstream ss;
+      ss << "turtle" << ++id_counter_;
+      real_name = ss.str();
+    } while (hasTurtle(real_name));
+  }
+  else
+  {
+    if (hasTurtle(real_name))
+    {
+      return "";
+    }
+  }
+
+  TurtlePtr t(new Turtle(ros::NodeHandle(real_name), turtle_images_[index], QPointF(x, height_in_meters_ - y), angle));
+  
+  turtles_[real_name] = t;
+  update();
+
+  ROS_INFO("Spawning turtle [%s] at x=[%f], y=[%f], theta=[%f]", real_name.c_str(), x, y, angle);
+
+  return real_name;
+}
+
+void TurtleFrame::clear()
+{
+  int r = DEFAULT_BG_R;
+  int g = DEFAULT_BG_G;
+  int b = DEFAULT_BG_B;
+
+  private_nh_.param("background_r", r, r);
+  private_nh_.param("background_g", g, g);
+  private_nh_.param("background_b", b, b);
+
+  path_image_.fill(qRgb(r, g, b));
+  update();
+}
+
+void TurtleFrame::onUpdate()
+{
+  ros::spinOnce();
+
+  updateTurtles();
+
+  if (!ros::ok())
+  {
+    close();
+  }
+}
+
+void TurtleFrame::paintEvent(QPaintEvent*)
+{
+  QPainter painter(this);
+
+  painter.drawImage(QPoint(0, 0), path_image_);
+
+  M_Turtle::iterator it = turtles_.begin();
+  M_Turtle::iterator end = turtles_.end();
+  for (; it != end; ++it)
+  {
+    it->second->paint(painter);
+  }
+}
+
+void TurtleFrame::updateTurtles()
+{
+  if (last_turtle_update_.isZero())
+  {
+    last_turtle_update_ = ros::WallTime::now();
+    return;
+  }
+
+  bool modified = false;
+  M_Turtle::iterator it = turtles_.begin();
+  M_Turtle::iterator end = turtles_.end();
+  for (; it != end; ++it)
+  {
+    modified |= it->second->update(0.001 * update_timer_->interval(), path_painter_, path_image_, width_in_meters_, height_in_meters_);
+  }
+  if (modified)
+  {
+    update();
+  }
+
+  ++frame_count_;
+}
+
+
+bool TurtleFrame::clearCallback(std_srvs::Empty::Request&, std_srvs::Empty::Response&)
+{
+  ROS_INFO("Clearing treasuredig.");
+  clear();
+  return true;
+}
+
+bool TurtleFrame::resetCallback(std_srvs::Empty::Request&, std_srvs::Empty::Response&)
+{
+  ROS_INFO("Resetting treasuredig.");
+  turtles_.clear();
+  id_counter_ = 0;
+  spawnTurtle("", width_in_meters_ / 2.0, height_in_meters_ / 2.0, 0);
+  clear();
+  return true;
+}
+
+}
+
+
+
+src/treasuredig/turtle.cpp
+
+
+//Modified by Dongmo Zhang August 2024
+
+#include "treasuredig/turtle.h"
+#include <ros/package.h>
+#include <QColor>
+#include <QRgb>
+
+#define DEFAULT_PEN_R 0xb3
+#define DEFAULT_PEN_G 0xb8
+#define DEFAULT_PEN_B 0xff
+
+const int refreshRate = 5000;
+
+namespace treasuredig
+{
+Turtle::Turtle(const ros::NodeHandle& nh, const QImage& turtle_image, const QPointF& pos, float orient)
+: nh_(nh)
+, turtle_image_(turtle_image)
+, pos_(pos)
+, orient_(orient)
+, lin_vel_x_(0.0)
+, lin_vel_y_(0.0)
+, ang_vel_(0.0)
+, pen_on_(true)
+, pen_(QColor(DEFAULT_PEN_R, DEFAULT_PEN_G, DEFAULT_PEN_B))
+{
+  pen_.setWidth(3);
+
+  velocity_sub_ = nh_.subscribe("cmd_vel", 1, &Turtle::velocityCallback, this);
+  pose_pub_ = nh_.advertise<Pose>("pose", 1);
+  color_pub_ = nh_.advertise<Color>("color_sensor", 1);
+  
+  //Dongmo
+  treasure_pub_ = nh_.advertise<Treasure>("treasure", 1000);
+  //End
+  
+  set_pen_srv_ = nh_.advertiseService("set_pen", &Turtle::setPenCallback, this);
+  teleport_relative_srv_ = nh_.advertiseService("teleport_relative", &Turtle::teleportRelativeCallback, this);
+  teleport_absolute_srv_ = nh_.advertiseService("teleport_absolute", &Turtle::teleportAbsoluteCallback, this);
+
+  meter_ = turtle_image_.height();
+  rotateImage();
+
+  //Dongmo  
+  QString image_path = (ros::package::getPath("treasuredig") + "/images/treasure.png").c_str();
+  treasure_image.load(image_path);
+  treasureStatus.x = rand() % 500;
+  treasureStatus.y = rand() % 500;
+  treasureStatus.value = 1 + rand()%10;
+  treasureStatus.win = false;
+  //End
+}
+
+
+void Turtle::velocityCallback(const geometry_msgs::Twist::ConstPtr& vel)
+{
+  last_command_time_ = ros::WallTime::now();
+  lin_vel_x_ = vel->linear.x;
+  lin_vel_y_ = vel->linear.y;
+  ang_vel_ = vel->angular.z;
+}
+
+bool Turtle::setPenCallback(treasuredig::SetPen::Request& req, treasuredig::SetPen::Response&)
+{
+  pen_on_ = !req.off;
+  if (req.off)
+  {
+    return true;
+  }
+
+  QPen pen(QColor(req.r, req.g, req.b));
+  if (req.width != 0)
+  {
+    pen.setWidth(req.width);
+  }
+
+  pen_ = pen;
+  return true;
+}
+
+bool Turtle::teleportRelativeCallback(treasuredig::TeleportRelative::Request& req, treasuredig::TeleportRelative::Response&)
+{
+  teleport_requests_.push_back(TeleportRequest(0, 0, req.angular, req.linear, true));
+  return true;
+}
+
+bool Turtle::teleportAbsoluteCallback(treasuredig::TeleportAbsolute::Request& req, treasuredig::TeleportAbsolute::Response&)
+{
+  teleport_requests_.push_back(TeleportRequest(req.x, req.y, req.theta, 0, false));
+  return true;
+}
+
+void Turtle::rotateImage()
+{
+  QTransform transform;
+  transform.rotate(-orient_ * 180.0 / PI + 90.0);
+  turtle_rotated_image_ = turtle_image_.transformed(transform);
+}
+
+bool Turtle::update(double dt, QPainter& path_painter, const QImage& path_image, qreal canvas_width, qreal canvas_height)
+{
+  bool modified = false;
+  qreal old_orient = orient_;
+
+  // first process any teleportation requests, in order
+  V_TeleportRequest::iterator it = teleport_requests_.begin();
+  V_TeleportRequest::iterator end = teleport_requests_.end();
+  for (; it != end; ++it)
+  {
+    const TeleportRequest& req = *it;
+
+    QPointF old_pos = pos_;
+    if (req.relative)
+    {
+      orient_ += req.theta;
+      pos_.rx() += std::cos(orient_) * req.linear;
+      pos_.ry() += - std::sin(orient_) * req.linear;
+    }
+    else
+    {
+      pos_.setX(req.pos.x());
+      pos_.setY(std::max(0.0, static_cast<double>(canvas_height - req.pos.y())));
+      orient_ = req.theta;
+    }
+
+    if (pen_on_)
+    {
+      path_painter.setPen(pen_);
+      path_painter.drawLine(pos_ * meter_, old_pos * meter_);
+    }
+    modified = true;
+  }
+
+  teleport_requests_.clear();
+
+  if (ros::WallTime::now() - last_command_time_ > ros::WallDuration(1.0))
+  {
+    lin_vel_x_ = 0.0;
+    lin_vel_y_ = 0.0;
+    ang_vel_ = 0.0;
+  }
+
+  QPointF old_pos = pos_;
+
+  orient_ = orient_ + ang_vel_ * dt;
+  // Keep orient_ between -pi and +pi
+  orient_ -= 2*PI * std::floor((orient_ + PI)/(2*PI));
+  pos_.rx() += std::cos(orient_) * lin_vel_x_ * dt
+             - std::sin(orient_) * lin_vel_y_ * dt;
+  pos_.ry() -= std::cos(orient_) * lin_vel_y_ * dt
+             + std::sin(orient_) * lin_vel_x_ * dt;
+
+  // Clamp to screen size
+  if (pos_.x() < 0 || pos_.x() > canvas_width ||
+      pos_.y() < 0 || pos_.y() > canvas_height)
+  {
+//  Dongmo
+//    ROS_WARN("Oh no! I hit the wall! (Clamping from [x=%f, y=%f])", pos_.x(), pos_.y());
+//End
+  }
+
+  pos_.setX(std::min(std::max(static_cast<double>(pos_.x()), 0.0), static_cast<double>(canvas_width)));
+  pos_.setY(std::min(std::max(static_cast<double>(pos_.y()), 0.0), static_cast<double>(canvas_height)));
+
+  // Publish pose of the turtle
+  Pose p;
+  p.x = pos_.x();
+  p.y = pos_.y();
+  p.y = canvas_height - pos_.y();
+  p.theta = orient_;
+  p.linear_velocity = std::sqrt(lin_vel_x_ * lin_vel_x_ + lin_vel_y_ * lin_vel_y_);
+  p.angular_velocity = ang_vel_;
+ 
+  //Dongmo
+  p.x *=meter_;
+  p.y *=meter_;
+  pose_pub_.publish(p);
+
+  int chance = rand() % refreshRate;
+  if((abs(p.x- treasureStatus.x)<=25 && abs(p.y-treasureStatus.y) <= 25) && !treasureStatus.win) {
+     ROS_INFO("You won %d points!\n", treasureStatus.value);
+     ROS_INFO("Robot position (%f,%f)", pos_.x()* meter_, pos_.y()* meter_);
+     ROS_INFO("Treasure position (%d,%d) and value: %d", treasureStatus.x, treasureStatus.y, treasureStatus.value);
+     treasureStatus.win = true;
+       treasure_pub_.publish(treasureStatus); 
+      chance = 1;
+  }  
+  
+ if(chance == 0 || chance == 1) { 
+     treasureStatus.x = rand() % 500;
+     treasureStatus.y = rand() % 500;
+     treasureStatus.value = rand() % 10 + 1; 
+     treasureStatus.win = false;
+     ROS_INFO("New treasure position (%d,%d) and value: %d", treasureStatus.x,   treasureStatus.y, treasureStatus.value);
+  }
+       if(chance != 1)
+         treasure_pub_.publish(treasureStatus);
+  //End 
+  // Figure out (and publish) the color underneath the turtle
+  {
+    Color color;
+    QRgb pixel = path_image.pixel((pos_ * meter_).toPoint());
+    color.r = qRed(pixel);
+    color.g = qGreen(pixel);
+    color.b = qBlue(pixel);
+    color_pub_.publish(color);
+  }
+
+  ROS_DEBUG("[%s]: pos_x: %f pos_y: %f theta: %f", nh_.getNamespace().c_str(), pos_.x(), pos_.y(), orient_);
+  
+  if (orient_ != old_orient)
+  {
+    rotateImage();
+    modified = true;
+  }
+  if (pos_ != old_pos)
+  {
+    if (pen_on_)
+    {
+      path_painter.setPen(pen_);
+      path_painter.drawLine(pos_ * meter_, old_pos * meter_);
+    }
+    modified = true;
+  }
+
+  return modified;
+}
+
+void Turtle::paint(QPainter& painter)
+{
+  QPointF p = pos_ * meter_;
+  p.rx() -= 0.5 * turtle_rotated_image_.width();
+  p.ry() -= 0.5 * turtle_rotated_image_.height();
+  painter.drawImage(p, turtle_rotated_image_);
+  
+  //Dongmo
+ QPointF p_t;
+ double w = treasureStatus.x - 0.5*treasure_image.width();
+ double h = 500-treasureStatus.y - 0.5*treasure_image.height();
+  p_t.setX(w);
+  p_t.setY(h);
+  painter.drawImage(p_t, treasure_image);
+ //End
+}
+
+}
+
+
+src/turtlesim.cpp
+
+#include <QApplication>
+#include <time.h>
+
+#include <ros/ros.h>
+
+#include "treasuredig/turtle_frame.h"
+
+class TurtleApp : public QApplication
+{
+public:
+  ros::NodeHandlePtr nh_;
+
+  TurtleApp(int& argc, char** argv)
+    : QApplication(argc, argv)
+  {
+    ros::init(argc, argv, "treasuredig", ros::init_options::NoSigintHandler);
+    nh_.reset(new ros::NodeHandle);
+  }
+
+  int exec()
+  {
+    treasuredig::TurtleFrame frame;
+    frame.show();
+
+    return QApplication::exec();
+  }
+};
+
+int main(int argc, char** argv)
+{
+  srand(time(0));
+  TurtleApp app(argc, argv);
+  return app.exec();
+}
+
+
+
+

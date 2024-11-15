@@ -1,0 +1,8 @@
+prefix=/home/clish/INFO7002_ws/install
+
+Name: sending_files
+Description: Description of sending_files
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 
